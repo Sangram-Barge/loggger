@@ -1,58 +1,56 @@
 package main
 
 import (
-	"context"
-	"fmt"
+	"database/sql"
 	"log"
-	"net/http"
-	"os/signal"
-	"syscall"
-	"time"
+	"loggger/internal/handler"
+	"loggger/internal/model"
+	"loggger/internal/repository"
+	"loggger/internal/service"
+	"os"
 
-	"loggger/internal/server"
+	"github.com/golang-jwt/jwt/v5"
+	echojwt "github.com/labstack/echo-jwt/v4"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
+	_ "modernc.org/sqlite"
 )
 
-func gracefulShutdown(apiServer *http.Server, done chan bool) {
-	// Create context that listens for the interrupt signal from the OS.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	// Listen for the interrupt signal.
-	<-ctx.Done()
-
-	log.Println("shutting down gracefully, press Ctrl+C again to force")
-	stop() // Allow Ctrl+C to force shutdown
-
-	// The context is used to inform the server it has 5 seconds to finish
-	// the request it is currently handling
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := apiServer.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown with error: %v", err)
-	}
-
-	log.Println("Server exiting")
-
-	// Notify the main goroutine that the shutdown is complete
-	done <- true
-}
-
 func main() {
-
-	server := server.NewServer()
-
-	// Create a done channel to signal when the shutdown is complete
-	done := make(chan bool, 1)
-
-	// Run graceful shutdown in a separate goroutine
-	go gracefulShutdown(server, done)
-
-	err := server.ListenAndServe()
-	if err != nil && err != http.ErrServerClosed {
-		panic(fmt.Sprintf("http server error: %s", err))
+	jwtSecret := []byte(os.Getenv("JWT_SECRET"))
+	db, err := sql.Open("sqlite", "app.db")
+	if err != nil {
+		log.Fatal(err)
 	}
+	defer db.Close()
 
-	// Wait for the graceful shutdown to complete
-	<-done
-	log.Println("Graceful shutdown complete.")
+	db.Exec(`
+		CREATE TABLE IF NOT EXISTS users (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			email TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP	
+		);
+	`)
+
+	userRepo := repository.NewUserRepository(db)
+	authService := service.NewAuthService(userRepo, jwtSecret)
+	authHandler := handler.NewAuthHandler(authService)
+
+	e := echo.New()
+	e.Use(middleware.RequestLogger())
+	e.Use(middleware.Recover())
+
+	authGroup := e.Group("/auth")
+	authGroup.POST("/signup", authHandler.SignupHandler)
+	authGroup.POST("/login", authHandler.LoginHandler)
+
+	apiGroup := e.Group("/api")
+	apiGroup.Use(echojwt.WithConfig(echojwt.Config{
+		SigningKey: jwtSecret,
+		NewClaimsFunc: func(c echo.Context) jwt.Claims {
+			return new(model.CustomClaims)
+		},
+	}))
+	e.Logger.Fatal(e.Start(":8080"))
 }
