@@ -7,10 +7,11 @@ import (
 )
 
 type User struct {
-	ID        int64     `json:"id"`
-	Email     string    `json:"email"`
-	PassHash  string    `json:"pass_hash"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           int64     `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"`
+	TokenVersion int       `json:"token_version"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type AuthRequest struct {
@@ -19,11 +20,12 @@ type AuthRequest struct {
 }
 
 type AuthResponse struct {
-	Token string `json:"token"`
+	Token string `json:"token,omitempty"`
 }
 
 type CustomClaims struct {
-	UserID int64  `json:"user_id"`
-	Email  string `json:"email"`
+	UserID       int64  `json:"user_id"`
+	Email        string `json:"email"`
+	TokenVersion int    `json:"token_version"`
 	jwt.RegisteredClaims
 }
