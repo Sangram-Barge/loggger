@@ -46,6 +46,11 @@ func main() {
 	authGroup.POST("/login", authHandler.LoginHandler)
 
 	apiGroup := e.Group("/api")
+	apiGroup.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     []string{"*"},
+		AllowCredentials: true,
+		AllowHeaders:     []string{echo.HeaderAccept, echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAuthorization},
+	}))
 	apiGroup.Use(echojwt.WithConfig(echojwt.Config{
 		SigningKey: jwtSecret,
 		NewClaimsFunc: func(c echo.Context) jwt.Claims {

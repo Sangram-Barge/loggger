@@ -6,6 +6,7 @@ import (
 	"loggger/internal/repository"
 	"loggger/internal/service"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 )
@@ -35,6 +36,7 @@ func (a *AuthHandler) SignupHandler(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 	}
+	injectCookie(c, res.Token)
 	return c.JSON(http.StatusCreated, res)
 }
 
@@ -52,5 +54,18 @@ func (a *AuthHandler) LoginHandler(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 	}
+	injectCookie(c, res.Token)
 	return c.JSON(http.StatusOK, res)
+}
+
+func injectCookie(c echo.Context, token string) {
+	cookie := new(http.Cookie)
+	cookie.Name = "access_token"
+	cookie.Value = token
+	cookie.Expires = time.Now().Add(24 * time.Hour)
+	cookie.HttpOnly = true
+	cookie.Secure = true
+	cookie.SameSite = http.SameSiteStrictMode
+	cookie.Path = "/"
+	c.SetCookie(cookie)
 }
